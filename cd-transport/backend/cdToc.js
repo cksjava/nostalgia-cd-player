@@ -13,6 +13,7 @@ export function readCdToc(device = "/dev/sr0") {
       }
 
       const line = String(stdout || "").trim();
+      console.log(line)
       // Format: <ntracks> <offset1> <offset2> ... <offsetN> <leadout>
       const parts = line.split(/\s+/).map((x) => Number(x));
       const n = parts[0];
