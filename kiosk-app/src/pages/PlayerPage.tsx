@@ -35,7 +35,7 @@ export function PlayerPage() {
       try {
         const s = await api<Status>("/api/status");
         setStatus(s);
-      } catch {}
+      } catch { }
     }, 800);
 
     return () => clearInterval(i);
@@ -82,8 +82,8 @@ export function PlayerPage() {
           </div>
 
           <SeekBar
-            time={status?.time ?? 0}
-            duration={status?.duration ?? 0}
+            time={status?.trackTime ?? 0}
+            duration={status?.trackDuration ?? 0}
             onSeekCommit={(seconds) => api("/api/seek", "POST", { seconds })}
           />
 

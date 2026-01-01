@@ -101,9 +101,18 @@ app.post("/api/prev", async (_, res) => {
 
 /** Absolute seek (seconds from start of disc/track timeline) */
 app.post("/api/seek", async (req, res) => {
-  const seconds = Number(req.body?.seconds);
-  if (!Number.isFinite(seconds)) return res.status(400).json({ ok: false });
-  await mpvCommand({ command: ["set_property", "time-pos", seconds] });
+  const secondsInTrack = Number(req.body?.seconds);
+  if (!Number.isFinite(secondsInTrack)) return res.status(400).json({ ok: false });
+
+  const chapterR = await mpvCommand({ command: ["get_property", "chapter"] });
+  const chapterListR = await mpvCommand({ command: ["get_property", "chapter-list"] });
+
+  const chapter = Number.isFinite(chapterR?.data) ? chapterR.data : 0;
+  const chapterList = Array.isArray(chapterListR?.data) ? chapterListR.data : [];
+
+  const start = typeof chapterList?.[chapter]?.time === "number" ? chapterList[chapter].time : 0;
+
+  await mpvCommand({ command: ["set_property", "time-pos", start + secondsInTrack] });
   res.json({ ok: true });
 });
 
@@ -116,22 +125,16 @@ app.post("/api/volume", async (req, res) => {
 
 /** Tracks list from chapter-list (CD tracks) */
 app.get("/api/tracks", async (_, res) => {
-  try {
-    const chapters = await mpvCommand({
-      command: ["get_property", "chapter-list"],
-    });
+  const chapterListR = await mpvCommand({ command: ["get_property", "chapter-list"] });
+  const list = Array.isArray(chapterListR?.data) ? chapterListR.data : [];
 
-    const list = Array.isArray(chapters?.data) ? chapters.data : [];
-    const tracks = list.map((c, idx) => ({
-      index: idx,
-      title: (c && c.title) ? c.title : `Track ${idx + 1}`,
-      start: typeof c?.time === "number" ? c.time : null,
-    }));
+  const tracks = list.map((c, idx) => ({
+    index: idx,
+    title: c?.title || `Track ${idx + 1}`,
+    start: typeof c?.time === "number" ? c.time : null,
+  }));
 
-    res.json(tracks);
-  } catch {
-    res.json([]);
-  }
+  res.json(tracks);
 });
 
 /** Play a specific track by chapter index */
@@ -145,18 +148,36 @@ app.post("/api/track/play", async (req, res) => {
 });
 
 app.get("/api/status", async (_, res) => {
-  const time = await mpvCommand({ command: ["get_property", "time-pos"] });
-  const duration = await mpvCommand({ command: ["get_property", "duration"] });
-  const paused = await mpvCommand({ command: ["get_property", "pause"] });
-  const chapter = await mpvCommand({ command: ["get_property", "chapter"] });
-  const chapters = await mpvCommand({ command: ["get_property", "chapters"] });
+  const timePosR = await mpvCommand({ command: ["get_property", "time-pos"] });
+  const durationR = await mpvCommand({ command: ["get_property", "duration"] });
+  const pausedR = await mpvCommand({ command: ["get_property", "pause"] });
+  const chapterR = await mpvCommand({ command: ["get_property", "chapter"] });
+  const chapterListR = await mpvCommand({ command: ["get_property", "chapter-list"] });
+
+  const timePos = typeof timePosR?.data === "number" ? timePosR.data : 0;
+  const duration = typeof durationR?.data === "number" ? durationR.data : 0;
+  const chapter = Number.isFinite(chapterR?.data) ? chapterR.data : 0;
+  const chapterList = Array.isArray(chapterListR?.data) ? chapterListR.data : [];
+
+  const start = typeof chapterList?.[chapter]?.time === "number" ? chapterList[chapter].time : 0;
+  const nextStart =
+    typeof chapterList?.[chapter + 1]?.time === "number" ? chapterList[chapter + 1].time : duration;
+
+  const trackTime = Math.max(0, timePos - start);
+  const trackDuration = Math.max(0, nextStart - start);
 
   res.json({
-    time: time?.data ?? null,
-    duration: duration?.data ?? null,
-    paused: paused?.data ?? null,
-    track: chapter?.data ?? 0,
-    trackCount: chapters?.data ?? null,
+    // disc-level (can be useful)
+    timePos,
+    duration,
+
+    // track-level (use these for UI)
+    track: chapter,
+    trackTime,
+    trackDuration,
+
+    paused: pausedR?.data ?? null,
+    trackCount: chapterList.length || null,
   });
 });
 
