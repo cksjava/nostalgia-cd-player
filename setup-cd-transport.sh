@@ -17,6 +17,8 @@ sudo apt install -y \
 echo "=== Installing mpv ==="
 sudo apt install -y mpv
 
+sudo apt install -y cd-discid
+
 echo "=== Installing Node.js LTS (system-wide, systemd-safe) ==="
 # NodeSource LTS (20.x)
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -

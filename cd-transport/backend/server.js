@@ -3,6 +3,7 @@ import { spawn } from "child_process";
 import net from "net";
 import path from "path";
 import { fileURLToPath } from "url";
+import { readCdToc } from "./cdToc.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -57,6 +58,17 @@ startMpv();
 
 const app = express();
 app.use(express.json());
+
+// Disable ETag globally (prevents 304 for JSON responses)
+app.set("etag", false);
+
+// Ensure API is never cached by browsers/proxies
+app.use("/api", (req, res, next) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  next();
+});
 
 /** Load CD (chapters become tracks) */
 app.post("/api/cd/load", async (_, res) => {
@@ -125,16 +137,8 @@ app.post("/api/volume", async (req, res) => {
 
 /** Tracks list from chapter-list (CD tracks) */
 app.get("/api/tracks", async (_, res) => {
-  const chapterListR = await mpvCommand({ command: ["get_property", "chapter-list"] });
-  const list = Array.isArray(chapterListR?.data) ? chapterListR.data : [];
-
-  const tracks = list.map((c, idx) => ({
-    index: idx,
-    title: c?.title || `Track ${idx + 1}`,
-    start: typeof c?.time === "number" ? c.time : null,
-  }));
-
-  res.json(tracks);
+  const toc = await readCdToc(CDDA_DEVICE);
+  res.json(toc.tracks);
 });
 
 /** Play a specific track by chapter index */
@@ -152,32 +156,15 @@ app.get("/api/status", async (_, res) => {
   const durationR = await mpvCommand({ command: ["get_property", "duration"] });
   const pausedR = await mpvCommand({ command: ["get_property", "pause"] });
   const chapterR = await mpvCommand({ command: ["get_property", "chapter"] });
-  const chapterListR = await mpvCommand({ command: ["get_property", "chapter-list"] });
 
-  const timePos = typeof timePosR?.data === "number" ? timePosR.data : 0;
-  const duration = typeof durationR?.data === "number" ? durationR.data : 0;
-  const chapter = Number.isFinite(chapterR?.data) ? chapterR.data : 0;
-  const chapterList = Array.isArray(chapterListR?.data) ? chapterListR.data : [];
-
-  const start = typeof chapterList?.[chapter]?.time === "number" ? chapterList[chapter].time : 0;
-  const nextStart =
-    typeof chapterList?.[chapter + 1]?.time === "number" ? chapterList[chapter + 1].time : duration;
-
-  const trackTime = Math.max(0, timePos - start);
-  const trackDuration = Math.max(0, nextStart - start);
+  const toc = await readCdToc(CDDA_DEVICE);
 
   res.json({
-    // disc-level (can be useful)
-    timePos,
-    duration,
-
-    // track-level (use these for UI)
-    track: chapter,
-    trackTime,
-    trackDuration,
-
+    timePos: typeof timePosR?.data === "number" ? timePosR.data : null,
+    duration: typeof durationR?.data === "number" ? durationR.data : null,
     paused: pausedR?.data ?? null,
-    trackCount: chapterList.length || null,
+    track: Number.isFinite(chapterR?.data) ? chapterR.data : 0,
+    trackCount: toc.ok ? toc.tracks.length : null,
   });
 });
 
