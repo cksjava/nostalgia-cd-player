@@ -6,6 +6,7 @@ export function readCdToc(device = "/dev/sr0") {
   return new Promise((resolve) => {
     execFile("cd-discid", [device], (err, stdout) => {
       if (err) {
+        console.log(err)
         // no disc, no drive, permission issue, etc.
         resolve({ ok: false, tracks: [], error: err.message });
         return;
