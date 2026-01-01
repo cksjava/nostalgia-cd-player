@@ -1,4 +1,4 @@
-export type Track = { index: number; title: string; start: number | null };
+export type Track = { index: number; title: string; duration: number };
 
 export type Status = {
   // disc-level (optional)
