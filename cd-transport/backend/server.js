@@ -138,6 +138,7 @@ app.post("/api/volume", async (req, res) => {
 /** Tracks list from chapter-list (CD tracks) */
 app.get("/api/tracks", async (_, res) => {
   const toc = await readCdToc(CDDA_DEVICE);
+  console.log(toc);
   res.json(toc.tracks);
 });
 
